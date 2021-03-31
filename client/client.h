@@ -3,23 +3,19 @@
 #include <string>
 #include <winsock2.h>  
 #include <thread>
+#include <iomanip>
+#include <fstream>
 #include "aes.h"
 
 #define SERVER_PORT 54321
 #define CLIENT_PORT 8888
 #define SERVER_IP "192.168.124.1"
 #define CLIENT_IP "192.168.124.233"
-#define BUFFER_SIZE 4096
-#define FILE_SIZE	1024
+#define BUFFER_SIZE 2000	
+#define FILE_SIZE	1024	// better less than 1460(MSS)
 #define SHELL_START "shell_start"
 
 using namespace std;
-
-typedef struct _FILE_DATA {
-	int sec_index;
-	int sec_count;
-	int sec_length;
-}FILE_DATA, * PFILE_DATA;
 
 SOCKET g_client_socket;
 AES_CONTEXT g_aes_ctx;
@@ -36,3 +32,4 @@ void decrypt_payload(shared_ptr<char[]> buf_data, UINT buf_len);
 bool check_download(string download_str);
 bool check_upload(string upload_str);
 void refresh();
+void progress(int cur, int max);
