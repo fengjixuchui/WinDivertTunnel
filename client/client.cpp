@@ -56,13 +56,12 @@ int main()
 	sockaddr_in client_addr;
 	client_addr.sin_family = AF_INET;
 	client_addr.sin_port = htons(CLIENT_PORT);
-	client_addr.sin_addr.S_un.S_addr = inet_addr(CLIENT_IP);
+	client_addr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
 	if (bind(g_client_socket, (LPSOCKADDR)&client_addr, sizeof(server_addr)) == SOCKET_ERROR) {
 		cout << "[!] failed to bind port!" << endl;
 		return 0;
 	}
 
-	cout << "[*] bind to address:" << CLIENT_IP << ": " << CLIENT_PORT << " successfully!" << endl;
 	if (connect(g_client_socket, (LPSOCKADDR)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
 		cout << "[!] failed to connect server!" << endl;
 		return 0;
