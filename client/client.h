@@ -9,6 +9,7 @@
 
 #define SERVER_PORT 54321
 #define CLIENT_PORT 8888
+// #define SERVER_IP "192.168.65.1"
 #define SERVER_IP "192.168.124.1"
 #define BUFFER_SIZE 2000	
 #define FILE_SIZE	1024	// better less than 1460(MSS)
@@ -23,6 +24,7 @@ string g_srcfile, g_dstfile;
 static void proc_output();
 void file_download();
 void file_upload();
+bool g_use_encrypt = false;
 
 void send_data(const char* data_buf, size_t data_len = 0); 
 size_t recv_data(shared_ptr<char[]>& buf_data);

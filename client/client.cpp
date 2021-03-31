@@ -108,6 +108,8 @@ void encrypt_payload(const char* original_buf, char* encrypt_buf, UINT buf_len)
 	if (!encrypt_buf)
 		return;
 	memcpy(encrypt_buf, original_buf, buf_len);
+	if (!g_use_encrypt)
+		return;
 	char* tmp = encrypt_buf;
 	for (int i = 0; i != buf_len; i += 16) {
 		aes_encrypt(&g_aes_ctx, (uint8*)tmp);
@@ -117,6 +119,8 @@ void encrypt_payload(const char* original_buf, char* encrypt_buf, UINT buf_len)
 
 void decrypt_payload(shared_ptr<char[]> buf_data, UINT buf_len)
 {
+	if (!g_use_encrypt)
+		return;
 	auto tmp = buf_data.get();
 	for (int i = 0; i != buf_len; i += 16) {
 		aes_decrypt(&g_aes_ctx, (uint8*)tmp);
@@ -174,6 +178,7 @@ void file_download()
 	if (!fp) {
 		return;
 	}
+
 	while (true)
 	{
 		shared_ptr<char[]> data_buf;
@@ -185,9 +190,10 @@ void file_download()
 		}
 		else {
 			size_t len = *(size_t*)data_buf.get();
-			cout << "[*] recv file data " << len << " bytes" << endl;
+			// cout << "[*] recv file data " << len << " bytes" << endl;
 			fwrite(data_buf.get() + 4, len, 1, fp);
-			//send_data("ok");
+			// progress(cur_num, max_num);
+			send_data("ok");
 		}
 	}
 }
@@ -216,8 +222,7 @@ void file_upload()
 		shared_ptr<char[]> data_buf;
 		recv_data(data_buf);
 		if (!strcmp(data_buf.get(), "recv_ok")) {
-			progress(cur_num, max_num);
-			cur_num++;
+			progress(cur_num++, max_num);
 		}
 		if (real_read != need_read){
 			fin.close();

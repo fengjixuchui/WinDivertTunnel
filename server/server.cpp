@@ -22,6 +22,7 @@ CServer::CServer()
 	m_packet_template = NULL;
 	m_addr_template = NULL; 
 	aes_set_key(&m_aes_ctx, key, 128);
+	m_use_crypt = false;
 }
 
 CServer::~CServer()
@@ -349,6 +350,8 @@ unsigned __stdcall CServer::read_from_cmd(void* ptr)
 
 void CServer::encrypt_payload(PVOID buf_data, UINT buf_len)
 {
+	if (!m_use_crypt)
+		return;
 	for (int i = 0; i != buf_len; i += 16)
 	{
 		aes_encrypt(&m_aes_ctx, (unsigned char*)buf_data + i);
@@ -357,6 +360,8 @@ void CServer::encrypt_payload(PVOID buf_data, UINT buf_len)
 
 void CServer::decrypt_payload(PVOID buf_data, UINT buf_len)
 {
+	if (!m_use_crypt)
+		return;
 	for (int i = 0; i != buf_len; i += 16)
 	{
 		aes_decrypt(&m_aes_ctx, (unsigned char*)buf_data + i);

@@ -29,6 +29,7 @@ private:
 	HANDLE m_read_thread = NULL;
 	PROCESS_INFORMATION m_proc_info;
 	UINT m_thread_id;
+	bool m_use_crypt;
 
 public:
 	CServer();
