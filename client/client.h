@@ -9,7 +9,6 @@
 
 #define SERVER_PORT 54321
 #define CLIENT_PORT 8888
-// #define SERVER_IP "192.168.65.1"
 #define SERVER_IP "192.168.124.1"
 #define BUFFER_SIZE 2000	
 #define FILE_SIZE	1024	// better less than 1460(MSS)

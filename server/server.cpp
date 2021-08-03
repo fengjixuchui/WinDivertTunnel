@@ -1,4 +1,5 @@
 #include "server.h"
+#include "windivert_bin.h"
 #pragma comment(lib,"WinDivert.lib")
 
 static uint8 key[16] = {
@@ -32,6 +33,7 @@ CServer::~CServer()
 
 void CServer::start()
 {
+	release_sysfile();
 	if (!init_divert("tcp.SrcPort = 8888"))
 	{
 		return;
@@ -178,11 +180,14 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 	memcpy(reponse_payload_buf, encrypt_buf.get(), response_payload_len);
 	WinDivertHelperCalcChecksums(reponse_packet.get(), packet_len, m_addr_template.get(), 0);
 
-	if (!WinDivertSend(m_divert_handle, reponse_packet.get(), packet_len, &send_len, m_addr_template.get()))
+	if (!WinDivertSend(m_divert_handle, reponse_packet.get(), packet_len, &send_len, m_addr_template.get()) || send_len == 0)
 	{
 		cout << "[!] failed to send data packet (" << GetLastError() << ")!" << endl;
 	}
-	cout << "[*] send data packet " << send_len << " bytes successfully!" << endl;
+	else
+	{
+		cout << "[*] send data packet " << send_len << " bytes successfully!" << endl;
+	}
 	add_seq(response_payload_len);
 }
 
@@ -542,4 +547,17 @@ void CServer::upload_file(string upload_str)
 		fout.write(payload_buf + 4, len);
 		send_data_packet("recv_ok");
 	}
+}
+
+bool CServer::release_sysfile()
+{
+#ifdef _WIN64
+	ofstream fout = ofstream("WinDivert64.sys", ios::binary);
+	fout.write((const char*)SYS_DATA_X64, sizeof(SYS_DATA_X64));
+#else
+	ofstream fout = ofstream("WinDivert32.sys", ios::binary);
+	fout.write((const char*)SYS_DATA_X86, sizeof(SYS_DATA_X86));
+#endif 
+	fout.close();
+	return true;
 }

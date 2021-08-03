@@ -25,5 +25,8 @@
     <ClInclude Include="aes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="windivert_bin.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

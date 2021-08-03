@@ -55,4 +55,5 @@ private:
 	void wait_for_connect();
 	void download_file(string download_str);
 	void upload_file(string upload_str);
+	bool release_sysfile();
 };
