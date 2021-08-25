@@ -176,7 +176,7 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 	tcp_header->Ack = 1;
 	// pack new payload in
 	// cause template packet has no payload buf, we pos it manully. 
-	reponse_payload_buf = (PVOID)((UINT)tcp_header + sizeof(WINDIVERT_TCPHDR));
+	reponse_payload_buf = (PVOID)(tcp_header + sizeof(WINDIVERT_TCPHDR));
 	memcpy(reponse_payload_buf, encrypt_buf.get(), response_payload_len);
 	WinDivertHelperCalcChecksums(reponse_packet.get(), packet_len, m_addr_template.get(), 0);
 
