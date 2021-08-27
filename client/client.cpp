@@ -42,32 +42,64 @@ int main()
 		return 0;
 	}
 
+	g_direct_mode = false;
+
 	sockaddr_in server_addr;
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(SERVER_PORT);
 	server_addr.sin_addr.S_un.S_addr = inet_addr(SERVER_IP);
 
-	g_client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (g_client_socket == INVALID_SOCKET) {
-		cout << "[!] failed to create server socket!" << endl;
-		return 0;
-	}
-
 	sockaddr_in client_addr;
 	client_addr.sin_family = AF_INET;
 	client_addr.sin_port = htons(CLIENT_PORT);
 	client_addr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
-	if (bind(g_client_socket, (LPSOCKADDR)&client_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-		cout << "[!] failed to bind port!" << endl;
-		return 0;
-	}
+	if (g_direct_mode)
+	{
+		g_client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (g_client_socket == INVALID_SOCKET) {
+			cout << "[!] failed to create client socket!" << endl;
+			return 0;
+		}
 
-	if (connect(g_client_socket, (LPSOCKADDR)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-		cout << "[!] failed to connect server!" << endl;
-		return 0;
-	}
+		if (bind(g_client_socket, (LPSOCKADDR)&client_addr, sizeof(client_addr)) == SOCKET_ERROR) {
+			cout << "[!] failed to bind port!" << endl;
+			return 0;
+		}
+		if (connect(g_client_socket, (LPSOCKADDR)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+			cout << "[!] failed to connect server!" << endl;
+			return 0;
+		}
 
-	cout << "[*] connect to address:" << SERVER_IP << ": " << SERVER_PORT << " successfully!" << endl;
+		cout << "[*] connect to address:" << SERVER_IP << ": " << SERVER_PORT << " successfully!" << endl;
+	}
+	else
+	{
+		g_listen_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (g_listen_socket == INVALID_SOCKET) {
+			cout << "[!] failed to create listen socket!" << endl;
+			return 0;
+		}
+
+
+		if (SOCKET_ERROR == bind(g_listen_socket, (SOCKADDR*)&client_addr, sizeof(client_addr))) {
+			cout << "[!] failed to bind server socket!" << endl;
+			return 0;
+		}
+
+		if (listen(g_listen_socket, SOMAXCONN) == SOCKET_ERROR) {
+			cout << "[!] listen failed with error:WSAGetLastError()" << endl;
+			closesocket(g_listen_socket);
+			return 1;
+		}
+		cout << "[*] waiting for incoming connections..." << endl;
+		g_client_socket = accept(g_listen_socket, NULL, NULL);
+		if (g_client_socket == INVALID_SOCKET) {
+			cout << "[!] accept failed with error code : " << WSAGetLastError() << endl;
+			return 0;
+		}
+
+		cout << "[*] connection accepted" << endl;
+	}
 	thread output_thread = thread(proc_output);
 	output_thread.detach();
 
@@ -261,6 +293,10 @@ size_t recv_data(shared_ptr<char[]>& buf_data)
 	}
 	else {
 		buf_data = shared_ptr<char[]>(new char[buf_len] {});
+		if (buf_data == NULL)
+		{
+			cout << "[!] failed to allocate buffer!" << endl;
+		}
 		memcpy(buf_data.get(), recv_data, buf_len);
 		decrypt_payload(buf_data, buf_len);
 	}

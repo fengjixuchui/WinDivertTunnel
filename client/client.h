@@ -16,7 +16,9 @@
 
 using namespace std;
 
+BOOL g_direct_mode = true;
 SOCKET g_client_socket;
+SOCKET g_listen_socket;
 AES_CONTEXT g_aes_ctx;
 bool g_ondownload;
 string g_srcfile, g_dstfile;
