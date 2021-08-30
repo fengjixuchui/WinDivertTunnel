@@ -110,8 +110,7 @@ void CServer::set_packet_template(PVOID packet, UINT recv_len)
 		&payload_len, NULL, NULL);
 	m_template_packet_len = recv_len - payload_len;
 	m_packet_template = shared_ptr<char[]>(new char[m_template_packet_len] {});
-	if (m_packet_template == NULL)
-	{
+	if (m_packet_template == NULL) {
 		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
 		return;
 	}
@@ -137,8 +136,7 @@ void CServer::set_packet_template(PVOID packet, UINT recv_len)
 void CServer::set_addr_template(WINDIVERT_ADDRESS addr)
 {
 	m_addr_template = make_shared<WINDIVERT_ADDRESS>();
-	if (m_addr_template == NULL)
-	{
+	if (m_addr_template == NULL) {
 		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
 		return;
 	}
@@ -158,8 +156,7 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 		payload_len = strlen(payload_buf);
 	send_payload_len = 16 * (payload_len / 16 + 1);
 	auto encrypt_buf = shared_ptr<char[]>(new char[send_payload_len]());
-	if (!encrypt_buf)
-	{
+	if (!encrypt_buf) {
 		return;
 	}
 	memcpy(encrypt_buf.get(), payload_buf, payload_len);
@@ -168,8 +165,7 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 	packet_len = m_template_packet_len + send_payload_len;
 	// build response packet
 	auto reponse_packet = unique_ptr<char[]>(new char[packet_len]());
-	if (!reponse_packet)
-	{
+	if (!reponse_packet) {
 		cout << "[!] failed to allocate buffer (" << GetLastError() << ")!" << endl;
 		return;
 	}
@@ -191,12 +187,10 @@ void CServer::send_data_packet(const char* payload_buf, int payload_len)
 	memcpy(send_payload_buf, encrypt_buf.get(), send_payload_len);
 	WinDivertHelperCalcChecksums(reponse_packet.get(), packet_len, m_addr_template.get(), 0);
 
-	if (!WinDivertSend(m_divert_handle, reponse_packet.get(), packet_len, &send_len, m_addr_template.get()) || send_len == 0)
-	{
+	if (!WinDivertSend(m_divert_handle, reponse_packet.get(), packet_len, &send_len, m_addr_template.get()) || send_len == 0) {
 		cout << "[!] failed to send data packet (" << GetLastError() << ")!" << endl;
 	}
-	else
-	{
+	else {
 		cout << "[*] send data packet " << send_len << " bytes successfully!" << endl;
 	}
 	add_seq(send_payload_len);

@@ -32,9 +32,46 @@ void proc_output()
 	}
 }
 
-int main()
+int main(int argc, char** argv)
 {
-	aes_set_key(&g_aes_ctx, key, 128);
+	std::string target_address = "";
+	int lport = 8888;
+	int rport = 54321;
+	bool direct_mode = false;
+	if (argc == 1)
+	{
+		show_help();
+		return 0;
+	}
+	for (int i = 1; i < argc; ++i)
+	{
+		if (!_stricmp(argv[i], "-c") || !_stricmp(argv[i], "--connect"))
+		{
+			direct_mode = true;
+			target_address = argv[i + 1];
+		}
+		else if (!_stricmp(argv[i], "-l") || !_stricmp(argv[i], "--lport"))
+		{
+			lport = atoi(argv[i + 1]);
+		}
+		else if (!_stricmp(argv[i], "-r") || !_stricmp(argv[i], "--rport"))
+		{
+			rport = atoi(argv[i + 1]);
+		}
+		else if (!_stricmp(argv[i], "-e") || !_stricmp(argv[i], "--encrypt"))
+		{
+			g_use_encrypt = true;
+		}
+		else if (!_stricmp(argv[i], "-h") || !_stricmp(argv[i], "--help"))
+		{
+			show_help();
+			return 0;
+		}
+	}
+	
+	if (g_use_encrypt) {
+		aes_set_key(&g_aes_ctx, key, 128);
+	}
 	WORD winsock_version = MAKEWORD(2, 2);
 	WSADATA wsa_data;
 	if (WSAStartup(winsock_version, &wsa_data) != 0) {
@@ -42,18 +79,18 @@ int main()
 		return 0;
 	}
 
-	g_direct_mode = false;
+	direct_mode = false;
 
 	sockaddr_in server_addr;
 	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(SERVER_PORT);
-	server_addr.sin_addr.S_un.S_addr = inet_addr(SERVER_IP);
+	server_addr.sin_port = htons(rport);
+	server_addr.sin_addr.S_un.S_addr = inet_addr(target_address.c_str());
 
 	sockaddr_in client_addr;
 	client_addr.sin_family = AF_INET;
-	client_addr.sin_port = htons(CLIENT_PORT);
+	client_addr.sin_port = htons(lport);
 	client_addr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
-	if (g_direct_mode)
+	if (direct_mode)
 	{
 		g_client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (g_client_socket == INVALID_SOCKET) {
@@ -70,7 +107,7 @@ int main()
 			return 0;
 		}
 
-		cout << "[*] connect to address:" << SERVER_IP << ": " << SERVER_PORT << " successfully!" << endl;
+		cout << "[*] connect to address:" << target_address << ": " << rport << " successfully!" << endl;
 	}
 	else
 	{
@@ -133,6 +170,18 @@ int main()
 	WSACleanup();
 
 	return 0;
+}
+
+void show_help()
+{
+	cout << endl << "Usage: client [-c address][-l port][-r port][-e]" << endl << endl;
+
+	cout << "Options:" << endl;
+	cout << "\t-c address	connect to host Remote host address." << endl;
+	cout << "\t-l port		the port on local side." << endl;
+	cout << "\t-r port		the port on remote host." << endl;
+	cout << "\t-e			the port on remote host." << endl;
+	cout << "\t-h			show this help info" << endl;
 }
 
 void encrypt_payload(const char* original_buf, char* encrypt_buf, UINT buf_len)
