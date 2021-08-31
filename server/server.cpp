@@ -14,7 +14,45 @@ static uint8 key[16] = {
 int main(int argc, char** argv)
 {
 	CServer port_reuse;
-	port_reuse.set_reverse_mode(true);
+	if (argc == 1)
+	{
+		port_reuse.show_help();
+		return 0;
+	}
+	for (int i = 1; i < argc; ++i)
+	{
+		if (!_stricmp(argv[i], "-raddr") )
+		{
+			if (!port_reuse.set_raddr(argv[i + 1])) {
+				cout << "[!] address invalid" << endl;
+				return 0;
+			}
+		}		
+		if (!_stricmp(argv[i], "-laddr"))
+		{
+			if (!port_reuse.set_laddr(argv[i + 1])) {
+				cout << "[!] address invalid" << endl;
+				return 0;
+			}
+		}
+		else if (!_stricmp(argv[i], "-lport"))
+		{
+			port_reuse.set_lport(atoi(argv[i + 1]));
+		}
+		else if (!_stricmp(argv[i], "-rport"))
+		{
+			port_reuse.set_rport(atoi(argv[i + 1]));
+		}
+		else if (!_stricmp(argv[i], "-e"))
+		{
+			port_reuse.set_use_encrypt(true);
+		}
+		else if (!_stricmp(argv[i], "-h"))
+		{
+			port_reuse.show_help();
+			return 0;
+		}
+	}
 	port_reuse.start();
 	return 0;
 }
@@ -27,6 +65,9 @@ CServer::CServer()
 	m_addr_template = NULL; 
 	aes_set_key(&m_aes_ctx, key, 128);
 	m_use_crypt = false;
+	m_reverse_mode = false;
+	m_lport = 54321;
+	m_rport = 8888;
 }
 
 CServer::~CServer()
@@ -56,7 +97,6 @@ void CServer::start()
 	PVOID payload_buf;
 
 	char packet[WINDIVERT_MTU_MAX] = {};
-
 
 	while (TRUE)
 	{
@@ -569,11 +609,6 @@ bool CServer::release_sysfile()
 
 bool CServer::connect_to_target()
 {
-	if (!init_reverse_mode("192.168.124.233", "192.168.124.1", 8888, 54321))
-	{
-		cout << "[!] ip address invalid!" << endl;
-		return false;
-	}
 	build_packet_template();
 	build_addr_template();
 
@@ -708,8 +743,9 @@ typedef struct
 	iphdr.TTL = 128;			// Time To Live
 	iphdr.Protocol = 6;			// TCP (6)
 	iphdr.Checksum = 0;			// todo
-	iphdr.SrcAddr = m_src_addr;
-	iphdr.DstAddr = m_dst_addr;
+	// iphdr.SrcAddr = m_laddr;
+	iphdr.SrcAddr = INADDR_ANY;
+	iphdr.DstAddr = m_raddr;
 
 /*
 typedef struct
@@ -733,8 +769,8 @@ typedef struct
 } WINDIVERT_TCPHDR, *PWINDIVERT_TCPHDR;
 */
 	WINDIVERT_TCPHDR tcphdr{ 0 };
-	tcphdr.SrcPort = WinDivertHelperHtons(m_src_port);
-	tcphdr.DstPort = WinDivertHelperHtons(m_dst_port);
+	tcphdr.SrcPort = WinDivertHelperHtons(m_lport);
+	tcphdr.DstPort = WinDivertHelperHtons(m_rport);
 	tcphdr.SeqNum = rand();		// random seq number ISN(Initial Sequence Number)
 	tcphdr.AckNum = 0;				// ?
 	tcphdr.Reserved1 = 0;
@@ -772,11 +808,44 @@ void CServer::build_addr_template()
 	m_addr_template->Timestamp = ticks.QuadPart;
 }
 
-bool CServer::init_reverse_mode(string dst_addr, string src_addr, int dst_port, int src_port)
+void CServer::show_help()
 {
-	m_dst_port = dst_port;
-	m_src_port = src_port;
-	m_dst_addr = inet_addr(dst_addr.c_str());
-	m_src_addr = inet_addr(src_addr.c_str());
-	return INADDR_NONE != m_dst_addr && INADDR_NONE != m_src_addr;
+	cout << endl << "Usage: server [-raddr address][-laddr address]" << endl << 
+		"\t    [-lport port][-rport port][-r][-e]" << endl << endl;
+
+	cout << "Options:" << endl;
+	cout << "\t-raddr address	connect to host Remote host address.(only need in reverse mode)" << endl;
+	cout << "\t-laddr address	connect to host Remote host address.(only need in reverse mode)" << endl;
+	cout << "\t-lport port		the port on local side.(default 8888)" << endl;
+	cout << "\t-rport port		the port on remote host.(default 54321)" << endl;
+	cout << "\t-reverse			use reverse mode.(default direct mode)" << endl;
+	cout << "\t-e				use AES encrypt." << endl;
+	cout << "\t-h				show this help info" << endl;
+}
+
+void CServer::set_use_encrypt(bool mode)
+{
+	m_use_crypt = mode;
+}
+
+void CServer::set_lport(UINT16 lport)
+{
+	m_lport = lport;
+}
+
+void CServer::set_rport(UINT16 rport)
+{
+	m_rport = rport;
+}
+
+bool CServer::set_laddr(std::string laddr)
+{
+	m_laddr = inet_addr(laddr.c_str());
+	return INADDR_NONE != m_laddr;
+}
+
+bool CServer::set_raddr(std::string raddr)
+{
+	m_raddr = inet_addr(raddr.c_str());
+	return INADDR_NONE != m_raddr;
 }

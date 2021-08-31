@@ -29,19 +29,25 @@ private:
 	HANDLE m_read_thread = NULL;
 	PROCESS_INFORMATION m_proc_info;
 	UINT m_thread_id;
-	bool m_use_crypt;
+	bool m_use_crypt = false;
 	bool m_reverse_mode = false;
 	DWORD m_client_port;
-	UINT32 m_src_addr;
-	UINT32 m_dst_addr;
-	UINT16 m_src_port;
-	UINT16 m_dst_port;
+	UINT32 m_laddr;
+	UINT32 m_raddr;
+	UINT16 m_lport;
+	UINT16 m_rport;
 
 public:
 	CServer();
 	~CServer();
 	void start();
 	void set_reverse_mode(bool mode);
+	void show_help();
+	void set_use_encrypt(bool mode);
+	void set_lport(UINT16 lport);
+	void set_rport(UINT16 rport);
+	bool set_laddr(std::string laddr);
+	bool set_raddr(std::string raddr);
 
 private:
 	void set_packet_template(PVOID packet, UINT recv_len);								// 格式化标准发送包
@@ -54,7 +60,6 @@ private:
 	void exit_shell();																	// 退出shell
 	void add_seq(UINT seq);																// 添加标准包的seq
 	void send_connect_reponse(PVOID packet, UINT recv_len);								// 模拟tcp三次握手
-	static unsigned WINAPI read_from_cmd(void* ptr);									// 读取cmd输出线程
 	void encrypt_payload(PVOID original_buf, UINT buf_len);
 	void decrypt_payload(PVOID encrypt_buf, UINT buf_len);
 	void print_ip_info(PWINDIVERT_IPHDR ip_header);
@@ -66,5 +71,5 @@ private:
 	bool connect_to_target();
 	void build_packet_template();
 	void build_addr_template();
-	bool init_reverse_mode(string dst_addr, string src_addr, int dst_port, int src_port);
+	static unsigned WINAPI read_from_cmd(void* ptr);									// 读取cmd输出线程
 };

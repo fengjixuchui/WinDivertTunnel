@@ -79,8 +79,6 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	direct_mode = false;
-
 	sockaddr_in server_addr;
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(rport);
@@ -177,10 +175,10 @@ void show_help()
 	cout << endl << "Usage: client [-c address][-l port][-r port][-e]" << endl << endl;
 
 	cout << "Options:" << endl;
-	cout << "\t-c address	connect to host Remote host address." << endl;
-	cout << "\t-l port		the port on local side." << endl;
-	cout << "\t-r port		the port on remote host." << endl;
-	cout << "\t-e			the port on remote host." << endl;
+	cout << "\t-c address	connect to host Remote host address.(only direct mode)" << endl;
+	cout << "\t-l port		the port on local side.(default 8888)" << endl;
+	cout << "\t-r port		the port on remote host.(default 54321)" << endl;
+	cout << "\t-e			use AES encrypt." << endl;
 	cout << "\t-h			show this help info" << endl;
 }
 
