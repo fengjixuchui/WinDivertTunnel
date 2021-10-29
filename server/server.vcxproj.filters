@@ -11,21 +11,39 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="server.cpp">
+    <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="aes.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="server_ipv4.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="server_ipv6.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="server_base.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="server.h">
+    <ClInclude Include="main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="aes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="windivert_bin.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="server_ipv4.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="server_ipv6.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="server_base.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

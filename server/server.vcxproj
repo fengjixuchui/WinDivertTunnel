@@ -170,11 +170,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="aes.cpp" />
-    <ClCompile Include="server.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="server_base.cpp" />
+    <ClCompile Include="server_ipv4.cpp" />
+    <ClCompile Include="server_ipv6.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aes.h" />
-    <ClInclude Include="server.h" />
+    <ClInclude Include="main.h" />
+    <ClInclude Include="server_base.h" />
+    <ClInclude Include="server_ipv4.h" />
+    <ClInclude Include="server_ipv6.h" />
     <ClInclude Include="windivert_bin.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

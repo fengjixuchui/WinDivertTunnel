@@ -1,7 +1,6 @@
 #include "client.h"
-
 #pragma comment(lib, "ws2_32.lib")
-
+using namespace std;
 static uint8 key[16] = {
 	0x0f,0x15,0x71,0xc9,
 	0x47,0xd9,0xe8,0x59,
@@ -37,7 +36,12 @@ int main(int argc, char** argv)
 	std::string target_address = "";
 	int lport = 8888;
 	int rport = 54321;
-	bool direct_mode = false;
+	bool direct_mode = false;	
+#ifndef NDEBUG
+	direct_mode = true;
+	// target_address = "192.168.154.129";		// IPv4
+	target_address = "fd15:4ba5:5a2b:1008:501c:e55:c0b:f4bd";	// IPv6
+#else
 	if (argc == 1)
 	{
 		show_help();
@@ -68,6 +72,7 @@ int main(int argc, char** argv)
 			return 0;
 		}
 	}
+#endif
 	
 	if (g_use_encrypt) {
 		aes_set_key(&g_aes_ctx, key, 128);
@@ -79,6 +84,8 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
+	// IPv4
+	/*
 	sockaddr_in server_addr;
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(rport);
@@ -87,7 +94,23 @@ int main(int argc, char** argv)
 	sockaddr_in client_addr;
 	client_addr.sin_family = AF_INET;
 	client_addr.sin_port = htons(lport);
-	client_addr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
+	client_addr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);*/
+
+	// IPv6
+	sockaddr_in6 server_addr;
+	server_addr.sin6_family = AF_INET6;
+	server_addr.sin6_port = htons(rport);
+	if (1 != inet_pton(AF_INET6, target_address.c_str(), server_addr.sin6_addr.u.Byte))
+	{
+		cout << "address error!" << endl;
+		return 0;
+	}
+
+	sockaddr_in6 client_addr;
+	client_addr.sin6_family = AF_INET6;
+	client_addr.sin6_port = htons(lport);	
+	client_addr.sin6_addr = in6addr_any;
+
 	if (direct_mode)
 	{
 		g_client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -114,7 +137,6 @@ int main(int argc, char** argv)
 			cout << "[!] failed to create listen socket!" << endl;
 			return 0;
 		}
-
 
 		if (SOCKET_ERROR == bind(g_listen_socket, (SOCKADDR*)&client_addr, sizeof(client_addr))) {
 			cout << "[!] failed to bind server socket!" << endl;
@@ -173,7 +195,6 @@ int main(int argc, char** argv)
 void show_help()
 {
 	cout << endl << "Usage: client [-c address][-l port][-r port][-e]" << endl << endl;
-
 	cout << "Options:" << endl;
 	cout << "\t-c address	connect to host Remote host address.(only direct mode)" << endl;
 	cout << "\t-l port		the port on local side.(default 8888)" << endl;
