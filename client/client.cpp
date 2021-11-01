@@ -36,7 +36,7 @@ int main(int argc, char** argv)
 	std::string target_address = "";
 	int lport = 8888;
 	int rport = 54321;
-	bool direct_mode = false;	
+	bool direct_mode = false;
 #ifndef NDEBUG
 	direct_mode = true;
 	// target_address = "192.168.154.129";		// IPv4
@@ -73,7 +73,7 @@ int main(int argc, char** argv)
 		}
 	}
 #endif
-	
+
 	if (g_use_encrypt) {
 		aes_set_key(&g_aes_ctx, key, 128);
 	}
@@ -84,33 +84,135 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	// IPv4
-	/*
-	sockaddr_in server_addr;
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(rport);
-	server_addr.sin_addr.S_un.S_addr = inet_addr(target_address.c_str());
+	//连接ip
+	char target_ip[128];
+	memset(target_ip, 0, sizeof(target_ip));
+	strcpy(target_ip, target_address.c_str());
 
-	sockaddr_in client_addr;
-	client_addr.sin_family = AF_INET;
-	client_addr.sin_port = htons(lport);
-	client_addr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);*/
+	void* svraddr = nullptr;
+	void* cltaddr = nullptr;
+	int error = -1, svraddr_len, cltaddr_len;
+	bool ret = true;
+	struct sockaddr_in svraddr_4, cltaddr_4;
+	struct sockaddr_in6 svraddr_6, cltaddr_6;
 
-	// IPv6
-	sockaddr_in6 server_addr;
-	server_addr.sin6_family = AF_INET6;
-	server_addr.sin6_port = htons(rport);
-	if (1 != inet_pton(AF_INET6, target_address.c_str(), server_addr.sin6_addr.u.Byte))
+	if (direct_mode)
 	{
-		cout << "address error!" << endl;
-		return 0;
+		cout << "[*] on direct mode" << endl;
+		//获取网络协议
+		struct addrinfo* result;
+		if (getaddrinfo(target_ip, NULL, NULL, &result) != 1) {
+			cout << "[!] IP address error" << endl;
+		}
+		const struct sockaddr* sa = result->ai_addr;
+		socklen_t maxlen = 128;
+		switch (sa->sa_family) {
+		case AF_INET://ipv4
+			if ((g_client_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+				cout << "[!] failed to create client socket!" << endl;
+				ret = false;
+				break;
+			}
+
+			cout << "[*] socket created ipv4" << endl;
+			svraddr_4.sin_family = AF_INET;
+			svraddr_4.sin_addr.s_addr = inet_addr(target_ip);
+			svraddr_4.sin_port = htons(lport);
+			svraddr_len = sizeof(svraddr_4);
+			svraddr = &svraddr_4;
+
+
+			cltaddr_4.sin_family = AF_INET;
+			cltaddr_4.sin_addr.s_addr = INADDR_ANY;
+			cltaddr_4.sin_port = htons(rport);
+			cltaddr_len = sizeof(cltaddr_4);
+			cltaddr = &cltaddr_4;
+			break;
+		case AF_INET6://ipv6
+			if ((g_client_socket = socket(AF_INET6, SOCK_STREAM, 0)) < 0) {
+				cout << "[!] failed to create client socket!" << endl;
+				ret = false;
+				break;
+			}
+
+			cout << "[*] socket created ipv6" << endl;
+			memset(&svraddr_6, 0, sizeof(svraddr_6));
+			svraddr_6.sin6_family = AF_INET6;
+			svraddr_6.sin6_port = htons(lport);
+			if (inet_pton(AF_INET6, target_ip, &svraddr_6.sin6_addr) < 0) {
+				ret = false;
+				break;
+			}
+			svraddr_len = sizeof(svraddr_6);
+			svraddr = &svraddr_6;
+
+			cltaddr_len = sizeof(cltaddr_6);
+			memset(&cltaddr_6, 0, cltaddr_len);
+			cltaddr_6.sin6_family = AF_INET6;
+			cltaddr_6.sin6_addr = IN6ADDR_ANY_INIT;
+			//if (inet_pton(AF_INET6, "::1", &cltaddr_6.sin6_addr) < 0) {
+				//ret = false;
+				//break;
+			//}
+			cltaddr_6.sin6_port = htons(rport);
+			cltaddr = &cltaddr_6;
+			break;
+
+		default:
+			cout << "[*] unknown IP type" << endl;
+			ret = false;
+		}
+		freeaddrinfo(result);
+		if (ret) {
+			if (!bind(g_client_socket, (struct sockaddr*)cltaddr, cltaddr_len)) {
+				if (connect(g_client_socket, (struct sockaddr*)svraddr, svraddr_len)) {	// If no error occurs, connect returns zero.
+					cout << "[!] cannot connect the server" << endl;
+					return 0;
+				}
+				else {
+					cout << "[*] connect to address:" << target_address << ": " << rport << " successfully!" << endl;
+				}
+			}
+			else {
+				cout << "[!] bind error" << endl;
+				return 0;
+			}
+		}
+		else
+		{
+			return 0;
+		}
+	}
+	else
+	{
+		cout << "[*] on reverse mode" << endl;
+		g_listen_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (g_listen_socket == INVALID_SOCKET) {
+			cout << "[!] failed to create listen socket!" << endl;
+			return 0;
+		}
+
+		if (SOCKET_ERROR == bind(g_listen_socket, (SOCKADDR*)&cltaddr, cltaddr_len)) {
+			cout << "[!] failed to bind server socket!" << endl;
+			return 0;
+		}
+
+		if (listen(g_listen_socket, SOMAXCONN) == SOCKET_ERROR) {
+			cout << "[!] listen failed with error:WSAGetLastError()" << endl;
+			closesocket(g_listen_socket);
+			return 1;
+		}
+		cout << "[*] waiting for incoming connections..." << endl;
+		g_client_socket = accept(g_listen_socket, NULL, NULL);
+		if (g_client_socket == INVALID_SOCKET) {
+			cout << "[!] accept failed with error code : " << WSAGetLastError() << endl;
+			return 0;
+		}
+
+		cout << "[*] connection accepted" << endl;
 	}
 
-	sockaddr_in6 client_addr;
-	client_addr.sin6_family = AF_INET6;
-	client_addr.sin6_port = htons(lport);	
-	client_addr.sin6_addr = in6addr_any;
-
+	/*
 	if (direct_mode)
 	{
 		g_client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -119,15 +221,19 @@ int main(int argc, char** argv)
 			return 0;
 		}
 
-		if (bind(g_client_socket, (LPSOCKADDR)&client_addr, sizeof(client_addr)) == SOCKET_ERROR) {
+		//if (bind(g_client_socket, addr->ai_addr, addr->ai_addrlen) == SOCKET_ERROR) {
+		if (bind(g_client_socket, (sockaddr*)& client_addr, sizeof(sockaddr_in)) == SOCKET_ERROR) {
 			cout << "[!] failed to bind port!" << endl;
 			return 0;
 		}
-		if (connect(g_client_socket, (LPSOCKADDR)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+		//if (connect(g_client_socket, addr2->ai_addr, addr2->ai_addrlen) == SOCKET_ERROR) {
+		if (connect(g_client_socket, (sockaddr*)&server_addr, sizeof(sockaddr_in)) == SOCKET_ERROR) {
 			cout << "[!] failed to connect server!" << endl;
 			return 0;
 		}
 
+		//freeaddrinfo(addr);
+		//freeaddrinfo(addr2);
 		cout << "[*] connect to address:" << target_address << ": " << rport << " successfully!" << endl;
 	}
 	else
@@ -156,7 +262,7 @@ int main(int argc, char** argv)
 		}
 
 		cout << "[*] connection accepted" << endl;
-	}
+	}*/
 	thread output_thread = thread(proc_output);
 	output_thread.detach();
 
@@ -231,7 +337,7 @@ void decrypt_payload(shared_ptr<char[]> buf_data, UINT buf_len)
 bool check_download(string download_str)
 {
 	string word;
-	if (download_str.empty()){
+	if (download_str.empty()) {
 		return false;
 	}
 
@@ -239,7 +345,7 @@ bool check_download(string download_str)
 	str_stream >> word;
 	str_stream >> g_srcfile;
 	str_stream >> g_dstfile;
-	if (g_srcfile.empty() || g_dstfile.empty()){
+	if (g_srcfile.empty() || g_dstfile.empty()) {
 		return false;
 	}
 	cout << "[*] download file " << g_srcfile << " to " << g_dstfile << endl;
@@ -301,7 +407,7 @@ void file_download()
 void file_upload()
 {
 	cout << "[*] start upload" << endl;
-	ifstream fin(g_srcfile, ios::binary);	
+	ifstream fin(g_srcfile, ios::binary);
 	if (!fin.is_open()) {
 		cout << "[!] failed to open file (" << GetLastError() << ")!" << endl;
 		return;
@@ -324,7 +430,7 @@ void file_upload()
 		if (!strcmp(data_buf.get(), "recv_ok")) {
 			progress(cur_num++, max_num);
 		}
-		if (real_read != need_read){
+		if (real_read != need_read) {
 			fin.close();
 			cout << endl << "[*] upload finish" << endl;
 			send_data("upload_finish");

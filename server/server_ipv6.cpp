@@ -137,8 +137,8 @@ void server_ipv6::send_connect_reponse(PVOID packet, UINT recv_len)
 
 void server_ipv6::print_ip_info(PVOID ip6_header)
 {
-	char dst_addr[16];
-	char src_addr[16];
+	char dst_addr[64];
+	char src_addr[64];
 	if (WinDivertHelperFormatIPv6Address(((PWINDIVERT_IPV6HDR)ip6_header)->DstAddr, dst_addr, 64) &&
 		WinDivertHelperFormatIPv6Address(((PWINDIVERT_IPV6HDR)ip6_header)->SrcAddr, src_addr, 64)) {
 		cout << "[*] dst addr:" << dst_addr << "; src addr:" << src_addr << endl;
@@ -434,6 +434,7 @@ void server_ipv6::build_addr_template()
 	m_addr_template->IPChecksum = 1;
 	m_addr_template->Outbound = 1;
 	m_addr_template->Network.IfIdx = 4;
+	m_addr_template->IPv6 = 1;
 	LARGE_INTEGER ticks;
 	QueryPerformanceCounter(&ticks);
 	m_addr_template->Timestamp = ticks.QuadPart;

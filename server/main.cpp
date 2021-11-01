@@ -11,12 +11,12 @@ int main(int argc, char** argv)
 {
 	server_base* port_reuse;
 
-	port_reuse = new server_ipv4();
-	if (argc == 1)
-	{
-		port_reuse->show_help();
-		return 0;
-	}
+	port_reuse = new server_ipv6();
+	//if (argc == 1)
+	//{
+		//port_reuse->show_help();
+		//return 0;
+	//}
 	for (int i = 1; i < argc; ++i)
 	{
 		if (!_stricmp(argv[i], "-raddr") )

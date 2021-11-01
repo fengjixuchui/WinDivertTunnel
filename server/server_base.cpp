@@ -37,7 +37,7 @@ void server_base::set_reverse_mode(bool mode)
 void server_base::start()
 {
 	release_sysfile();
-	if (!init_divert("tcp.SrcPort = 8888"))	{
+	if (!init_divert("tcp.SrcPort = 8888||tcp.DstPort = 8888"))	{
 		return;
 	}
 	if (m_reverse_mode == true)	{
