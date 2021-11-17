@@ -148,7 +148,6 @@ void server_ipv4::print_ip_info(PVOID ip_header)
 	}
 }
 
-
 bool server_ipv4::recv_data_packet(PVOID packet_buf, PUINT payload_len, PVOID* payload_buf)
 {
 	PWINDIVERT_TCPHDR tcp_header;
@@ -425,7 +424,6 @@ void server_ipv4::build_addr_template()
 	QueryPerformanceCounter(&ticks);
 	m_addr_template->Timestamp = ticks.QuadPart;
 }
-
 
 bool server_ipv4::set_laddr(std::string laddr)
 {

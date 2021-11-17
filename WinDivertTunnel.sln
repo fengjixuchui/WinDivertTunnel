@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31112.23
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31912.275
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "client", "client\client.vcxproj", "{4EA1177C-B5F3-4258-B6BD-36B8CC8966F7}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "server", "server\server.vcxproj", "{FFEF61ED-F0D0-443E-9A1F-EF61C337C5C7}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proxy_tunnel", "proxy_tunnel\proxy_tunnel.vcxproj", "{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,6 +33,14 @@ Global
 		{FFEF61ED-F0D0-443E-9A1F-EF61C337C5C7}.Release|x64.Build.0 = Release|x64
 		{FFEF61ED-F0D0-443E-9A1F-EF61C337C5C7}.Release|x86.ActiveCfg = Release|Win32
 		{FFEF61ED-F0D0-443E-9A1F-EF61C337C5C7}.Release|x86.Build.0 = Release|Win32
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Debug|x64.ActiveCfg = Debug|x64
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Debug|x64.Build.0 = Debug|x64
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Debug|x86.ActiveCfg = Debug|Win32
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Debug|x86.Build.0 = Debug|Win32
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Release|x64.ActiveCfg = Release|x64
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Release|x64.Build.0 = Release|x64
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Release|x86.ActiveCfg = Release|Win32
+		{DDEC9C3C-FA2D-4CDF-A4BE-7B9C17459824}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
