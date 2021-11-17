@@ -413,6 +413,7 @@ size_t client::recv_data(shared_ptr<char[]>& buf_data)
 	return buf_len;
 }
 
+// show file download/upload progress
 void client::progress(int cur, int max)
 {
 	int percent = cur * 100 / max;
